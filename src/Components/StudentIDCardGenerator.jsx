@@ -204,7 +204,7 @@ const StudentIDCardGenerator = () => {
                   <div className="w-full h-full bg-gradient-to-br from-gray-50 to-blue-50 p-1 rounded-xl shadow-xl">
                     <div className="w-full h-full bg-white rounded-lg overflow-hidden">
                       {/* Header with Logo */}
-                      <div className="text-center pt-6 pb-3 px-4 bg-gradient-to-b from-white to-gray-50">
+                      <div className="text-center pt-1 pb-3 px-4 bg-gradient-to-b from-white to-gray-50">
                         <div className="flex items-center justify-center mb-1">
                           <span className="text-5xl font-black tracking-tight" style={{ letterSpacing: '-0.05em' }}>
                             <span style={{ color: '#FF7F50' }}>I-</span>
@@ -217,7 +217,7 @@ const StudentIDCardGenerator = () => {
                             SOFTWARE TRAINING
                           </span>
                         </div>
-                        <h2 className="text-xl font-bold tracking-wide -mt-5" style={{ color: '#1565C0' }}>INSTITUTE</h2>
+                        <h2 className="text-xl font-bold tracking-wide -ms-3 -mt-5" style={{ color: '#1565C0' }}>INSTITUTE</h2>
                       </div>
 
                       {/* Photo Section with Color Strips */}
@@ -249,11 +249,11 @@ const StudentIDCardGenerator = () => {
                       </div>
 
                       {/* Student Name */}
-                      <div className="text-center py-4 px-4">
+                      <div className="text-center py-2 px-2">
                         <h3 className="text-3xl font-black uppercase tracking-wide" style={{ color: '#0D47A1', letterSpacing: '0.05em' }}>
                           {formData.name || 'STUDENT NAME'}
                         </h3>
-                        <p className="text-base font-semibold text-gray-600 mt-1 uppercase tracking-wider">STUDENT</p>
+                        <p className="text-base font-bold text-gray-600 mt-1 uppercase tracking-wider">STUDENT</p>
                       </div>
 
                       {/* Student Details */}
@@ -307,7 +307,7 @@ const StudentIDCardGenerator = () => {
                             <svg className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                             </svg>
-                            <h4 className="text-base font-bold uppercase tracking-wide leading-tight">Office and Student Address</h4>
+                            <h4 className="text-base font-bold uppercase tracking-wide leading-tight">Office Address</h4>
                           </div>
                           <div className="text-sm leading-relaxed">
                             <p className="mb-0">Office No 301, 3rd Floor, Krishnai Plaza,</p>
