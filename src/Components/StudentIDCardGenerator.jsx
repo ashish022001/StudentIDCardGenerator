@@ -1,84 +1,245 @@
 import React, { useState, useRef } from 'react';
+import { Camera, Download, User, Calendar } from 'lucide-react';
+import { z } from 'zod';
 
-const StudentIDCardGenerator = () => {
+// Zod validation schema
+const studentSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name is too long'),
+  studentId: z.string().min(1, 'Student ID is required').max(20, 'Student ID is too long'),
+  courseId: z.string().min(1, 'Course ID is required').max(20, 'Course ID is too long'),
+  mobile: z.string().regex(/^[0-9]{10}$/, 'Mobile number must be exactly 10 digits'),
+  course: z.string().min(1, 'Please select a course'),
+  dob: z.string().min(1, 'Date of birth is required')
+});
+
+export default function IDCardGenerator() {
   const [formData, setFormData] = useState({
     name: '',
     studentId: '',
     courseId: '',
-    mobileNumber: '',
-    dob: '',
-    course: 'Java Full Stack Developer',
-    photo: ''
+    mobile: '',
+    course: '',
+    dob: ''
   });
-
+  const [photo, setPhoto] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
-  const idCardRef = useRef(null);
+  const [errors, setErrors] = useState({});
+  const cardRef = useRef(null);
+
+  const templateImagePath = '/temlate.png';
+  
+  const courses = [
+    'Java Full Stack Developer',
+    'Software Testing',
+    'Python Full Stack',
+    'Data Science'
+  ];
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Clear error for this field when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
+    }
   };
 
   const handlePhotoUpload = (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, photo: reader.result }));
+        setPhoto(reader.result);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = () => {
-    if (formData.name && formData.studentId && formData.courseId &&
-      formData.mobileNumber && formData.dob && formData.photo) {
+  const handlePreview = () => {
+    try {
+      // Validate form data
+      studentSchema.parse(formData);
+      setErrors({});
       setShowPreview(true);
-    } else {
-      alert('Please fill all required fields');
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors = {};
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            fieldErrors[err.path[0]] = err.message;
+          }
+        });
+        setErrors(fieldErrors);
+        alert('Please fix the validation errors before generating preview');
+      }
     }
   };
 
   const handleDownload = async () => {
-    if (!idCardRef.current) return;
-
     try {
-      const html2canvas = (await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm')).default;
-      const canvas = await html2canvas(idCardRef.current, {
-        scale: 3,
-        backgroundColor: '#ffffff',
-        logging: false,
-        useCORS: true
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const bgImage = new Image();
+      bgImage.crossOrigin = 'anonymous';
+      bgImage.src = templateImagePath;
+
+      await new Promise((resolve, reject) => {
+        bgImage.onload = resolve;
+        bgImage.onerror = () => reject(new Error('Failed to load template image'));
       });
 
+      canvas.width = bgImage.width;
+      canvas.height = bgImage.height;
+
+      ctx.drawImage(bgImage, 0, 0);
+
+      const imgWidth = bgImage.width;
+      const imgHeight = bgImage.height;
+
+      // Photo Improvements - better positioning and sizing
+      if (photo) {
+        const photoImg = new Image();
+        photoImg.src = photo;
+        await new Promise((resolve) => {
+          photoImg.onload = () => {
+            ctx.save();
+            
+            const photoTopPercent = 18; // Moved down from 16
+            const photoWidthPercent = 45.5; // Slightly increased size
+            
+            const centerX = imgWidth / 2;
+            const radius = (photoWidthPercent / 100) * imgWidth / 2;
+            const centerY = (photoTopPercent / 100) * imgHeight + radius;
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            const photoSize = radius * 2;
+            const aspectRatio = photoImg.width / photoImg.height;
+            let drawWidth = photoSize;
+            let drawHeight = photoSize;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (aspectRatio > 1) {
+              drawHeight = photoSize;
+              drawWidth = photoSize * aspectRatio;
+              offsetX = -(drawWidth - photoSize) / 2;
+            } else {
+              drawWidth = photoSize;
+              drawHeight = photoSize / aspectRatio;
+              offsetY = -(drawHeight - photoSize) / 2;
+            }
+
+            ctx.drawImage(photoImg,
+              centerX - radius + offsetX,
+              centerY - radius + offsetY,
+              drawWidth,
+              drawHeight
+            );
+            ctx.restore();
+            resolve();
+          };
+        });
+      }
+
+      // Draw name
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#1e3a8a';
+      const nameY = (50 / 100) * imgHeight + 35;
+      const nameFontSize = Math.round(imgWidth / 22);
+      ctx.font = `bold ${nameFontSize}px Arial`;
+      ctx.fillText(formData.name.toUpperCase(), imgWidth / 2, nameY);
+
+      // Draw "STUDENT" label
+      const labelFontSize = Math.round(imgWidth / 35);
+      ctx.font = `${labelFontSize}px Arial`;
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillText('STUDENT', imgWidth / 2, nameY + labelFontSize + 10);
+
+      // Mobile Number Spacing - improved text layout and spacing
+      ctx.textAlign = 'left';
+      const detailsFontSize = Math.round(imgWidth / 35);
+      ctx.font = `600 ${detailsFontSize}px Arial`;
+      ctx.fillStyle = '#000000';
+
+      const detailsStartY = (59 / 100) * imgHeight;
+      const leftMargin = (20 / 100) * imgWidth;
+      const lineHeight = detailsFontSize * 2;
+      const labelWidth = imgWidth * 0.22;
+
+      const details = [
+        { label: 'Student ID', value: formData.studentId },
+        { label: 'Course ID', value: formData.courseId },
+        { label: 'Mobile Number', value: formData.mobile },
+        { label: 'Course', value: formData.course },
+        { label: 'D.O.B.', value: formData.dob }
+      ];
+
+      details.forEach((detail, index) => {
+        const y = detailsStartY + (index * lineHeight);
+        ctx.fillText(detail.label, leftMargin, y);
+        const colonX = leftMargin + labelWidth;
+        ctx.fillText(':', colonX, y);
+        ctx.fillText(' ' + detail.value, colonX + (detailsFontSize * 1.2), y);
+      });
+
+      // Download
       const link = document.createElement('a');
-      link.download = `${formData.name.replace(/\s+/g, '_')}_ID_Card.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.download = `${formData.name || 'student'}_id_card.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
       link.click();
+
     } catch (error) {
-      console.error('Error generating ID card:', error);
-      alert('Error downloading ID card. Please try again.');
+      console.error('Error generating card:', error);
+      alert('Error generating ID card. Please make sure the template image is in the public folder.');
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-center text-indigo-900 mb-8">
-          I-RISE Student ID Card Generator
+        <h1 className="text-4xl font-bold text-center mb-2 text-blue-900">
+          I-RISE Software Training Institute
         </h1>
+        <p className="text-center text-gray-600 mb-8">Student ID Card Generator</p>
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-8">
           {/* Form Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Enter Student Details</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">Student Information</h2>
+
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Student Photo
+                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition">
+                    <Camera size={20} />
+                    Upload Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {photo && (
+                    <img src={photo} alt="Preview" className="w-16 h-16 rounded-full object-cover border-2 border-blue-600" />
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Full Name *
@@ -88,37 +249,48 @@ const StudentIDCardGenerator = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.name ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Enter full name"
                 />
+                {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Student ID *
-                </label>
-                <input
-                  type="text"
-                  name="studentId"
-                  value={formData.studentId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., 12345"
-                />
-              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Student ID *
+                  </label>
+                  <input
+                    type="text"
+                    name="studentId"
+                    value={formData.studentId}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.studentId ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="12345"
+                  />
+                  {errors.studentId && <p className="text-red-500 text-sm mt-1">{errors.studentId}</p>}
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Course ID *
-                </label>
-                <input
-                  type="text"
-                  name="courseId"
-                  value={formData.courseId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., 0001"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Course ID *
+                  </label>
+                  <input
+                    type="text"
+                    name="courseId"
+                    value={formData.courseId}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.courseId ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="0001"
+                  />
+                  {errors.courseId && <p className="text-red-500 text-sm mt-1">{errors.courseId}</p>}
+                </div>
               </div>
 
               <div>
@@ -127,26 +299,16 @@ const StudentIDCardGenerator = () => {
                 </label>
                 <input
                   type="tel"
-                  name="mobileNumber"
-                  value={formData.mobileNumber}
+                  name="mobile"
+                  value={formData.mobile}
                   onChange={handleInputChange}
-                  maxLength={10}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="10-digit mobile number"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.mobile ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="9999999999"
+                  maxLength="10"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Birth *
-                </label>
-                <input
-                  type="date"
-                  name="dob"
-                  value={formData.dob}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                {errors.mobile && <p className="text-red-500 text-sm mt-1">{errors.mobile}</p>}
               </div>
 
               <div>
@@ -157,205 +319,110 @@ const StudentIDCardGenerator = () => {
                   name="course"
                   value={formData.course}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.course ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 >
-                  <option value="Java Full Stack Developer">Java Full Stack Developer</option>
-                  <option value="Python Full Stack Developer">Python Full Stack Developer</option>
-                  <option value="MERN Stack Developer">MERN Stack Developer</option>
-                  <option value="Data Science">Data Science</option>
-                  <option value="DevOps Engineer">DevOps Engineer</option>
+                  <option value="">Select a course</option>
+                  {courses.map((course) => (
+                    <option key={course} value={course}>
+                      {course}
+                    </option>
+                  ))}
                 </select>
+                {errors.course && <p className="text-red-500 text-sm mt-1">{errors.course}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Profile Photo *
+                  Date of Birth *
                 </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {formData.photo && (
-                  <div className="mt-2">
-                    <img src={formData.photo} alt="Preview" className="w-24 h-24 object-cover rounded-full border-2 border-gray-300" />
-                  </div>
-                )}
+                <div className="relative">
+                  <input
+                    type="date"
+                    name="dob"
+                    value={formData.dob}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.dob ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                </div>
+                {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
               </div>
 
               <button
-                onClick={handleSubmit}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200"
+                onClick={handlePreview}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
               >
-                Generate ID Card
+                Generate Preview
               </button>
             </div>
           </div>
 
           {/* Preview Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">ID Card Preview</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">ID Card Preview</h2>
 
             {showPreview ? (
               <div className="space-y-4">
-                <div ref={idCardRef} className="bg-white mx-auto" style={{ width: '450px', height: '650px' }}>
-                  {/* ID Card Design */}
-                  <div className="w-full h-full bg-gradient-to-br from-gray-50 to-blue-50 p-1 rounded-xl shadow-xl">
-                    <div className="w-full h-full bg-white rounded-lg overflow-hidden">
-                      {/* Header with Logo */}
-                      <div className="text-center pt-1 pb-3 px-4 bg-gradient-to-b from-white to-gray-50">
-                        <div className="flex items-center justify-center mb-1">
-                          <span className="text-5xl font-black tracking-tight" style={{ letterSpacing: '-0.05em' }}>
-                            <span style={{ color: '#FF7F50' }}>I-</span>
-                            <span style={{ color: '#4FC3F7' }}>R</span>
-                            <span style={{ color: '#29B6F6' }}>I</span>
-                            <span style={{ color: '#EC407A' }}>S</span>
-                            <span style={{ color: '#42A5F5' }}>E</span>
-                          </span>
-                          <span className="ml-3 -mt-3 text-2xl font-bold" style={{ color: '#1565C0', letterSpacing: '0.02em' }}>
-                            SOFTWARE TRAINING
-                          </span>
-                        </div>
-                        <h2 className="text-xl font-bold tracking-wide -ms-3 -mt-5" style={{ color: '#1565C0' }}>INSTITUTE</h2>
-                      </div>
+                <div ref={cardRef} className="relative w-full rounded-lg overflow-hidden shadow-xl">
+                  <img src={templateImagePath} alt="Template" className="w-full h-auto" />
 
-                      {/* Photo Section with Color Strips */}
-                      <div className="relative h-52 bg-gradient-to-b from-gray-50 to-white">
-                        {/* Left Blue Strip */}
-                        <div className="absolute left-0 top-0 w-24 h-52" style={{ backgroundColor: '#1E88E5' }}></div>
+                  {/* Overlay photo */}
+                  {photo && (
+                    <div className="absolute -mt-8" style={{
+                      top: '21.5%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: '45.5%',
+                      paddingBottom: '45.5%'
+                    }}>
+                      <img
+                        src={photo}
+                        alt="Student"
+                        className="absolute inset-0 w-full h-full object-cover rounded-full"
+                      />
+                    </div>
+                  )}
 
-                        {/* Right Pink Strip */}
-                        <div className="absolute right-0 top-0 h-52" style={{ width: '220px', backgroundColor: '#EC407A' }}></div>
+                  {/* Overlay text */}
+                  <div className="absolute" style={{ top: '50.5%', left: 0, right: 0, textAlign: 'center' }}>
+                    <h3 className="text-xl md:text-2xl font-bold text-blue-900 px-4">
+                      {formData.name.toUpperCase()}
+                    </h3>
+                    <p className="text-gray-500 text-xs md:text-sm mt-1">STUDENT</p>
+                  </div>
 
-                        {/* Center Photo Circle */}
-                        <div className="absolute inset-0 flex items-center justify-center z-10">
-                          <div className="w-44 h-44 rounded-full bg-white shadow-2xl p-2">
-                            <div className="w-full h-full rounded-full overflow-hidden bg-gray-100">
-                              {formData.photo ? (
-                                <img
-                                  src={formData.photo}
-                                  alt="Student"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                                  No Photo
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Student Name */}
-                      <div className="text-center py-2 px-2">
-                        <h3 className="text-3xl font-black uppercase tracking-wide" style={{ color: '#0D47A1', letterSpacing: '0.05em' }}>
-                          {formData.name || 'STUDENT NAME'}
-                        </h3>
-                        <p className="text-base font-bold text-gray-600 mt-1 uppercase tracking-wider">STUDENT</p>
-                      </div>
-
-                      {/* Student Details */}
-                      <div className="px-1 pb-4 space-y-1">
-                        {/* Student ID */}
-                        <div className="flex items-start">
-                          <div className="w-1 h-5 mr-3 rounded-sm" style={{ backgroundColor: "#1E88E5" }} />
-                          <div className="grid grid-cols-[120px_10px_1fr] text-sm">
-                            <span className="font-semibold text-gray-700">Student ID</span>
-                            <span className="text-gray-600">:</span>
-                            <span className="font-medium text-gray-800">{formData.studentId}</span>
-                          </div>
-                        </div>
-
-                        {/* Course ID */}
-                        <div className="pl-4 grid grid-cols-[120px_10px_1fr] text-sm">
-                          <span className="font-semibold text-gray-700">Course ID</span>
-                          <span className="text-gray-600">:</span>
-                          <span className="font-medium text-gray-800">{formData.courseId}</span>
-                        </div>
-
-                        {/* Mobile Number */}
-                        <div className="pl-4 grid grid-cols-[120px_10px_1fr] text-sm">
-                          <span className="font-semibold text-gray-700">Mobile No</span>
-                          <span className="text-gray-600">:</span>
-                          <span className="font-medium text-gray-800">{formData.mobileNumber}</span>
-                        </div>
-
-                        {/* Course */}
-                        <div className="pl-4 grid grid-cols-[120px_10px_1fr] text-sm">
-                          <span className="font-semibold text-gray-700">Course</span>
-                          <span className="text-gray-600">:</span>
-                          <span className="font-medium text-gray-800">{formData.course}</span>
-                        </div>
-
-                        {/* Date of Birth */}
-                        <div className="pl-4 grid grid-cols-[120px_10px_1fr] text-sm">
-                          <span className="font-semibold text-gray-700">D.O.B.</span>
-                          <span className="text-gray-600">:</span>
-                          <span className="font-medium text-gray-800">
-                            {formatDate(formData.dob)}
-                          </span>
-                        </div>
-                      </div>
-
-
-                      {/* Office Address Section - Full Width Blue Bar */}
-                      <div className="w-full" style={{ backgroundColor: '#1565C0' }}>
-                        <div className="px-6 py-4 text-white">
-                          <div className="flex items-start mb-2">
-                            <svg className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                            </svg>
-                            <h4 className="text-base font-bold uppercase tracking-wide leading-tight">Office Address</h4>
-                          </div>
-                          <div className="text-sm leading-relaxed">
-                            <p className="mb-0">Office No 301, 3rd Floor, Krishnai Plaza,</p>
-                            <p className="mb-0">above Dominos Pizza, Karve Nagar,</p>
-                            <p className="mb-2">Pune, Maharashtra 411052</p>
-                            <div className="flex items-center">
-                              <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                              </svg>
-                              <span className="leading-tight">+91-9403319401, +91-7219469401</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Pink Bottom Strip */}
-                      <div className="w-full h-6" style={{ backgroundColor: '#EC407A' }}></div>
-
-                      {/* Website Footer */}
-                      <div className="px-4 py-2 text-center bg-gradient-to-r from-gray-50 to-blue-50">
-                        <p className="text-lg font-bold" style={{ color: '#1565C0' }}>www.irisesoft.in</p>
-                      </div>
+                  {/* Details overlay */}
+                  <div className="absolute -mt-6 md:px-12 text-xs md:text-sm" style={{ top: '62.5%', left: 0, right: 0 }}>
+                    <div className="space-y-1">
+                      <div className="flex ml-20 text-[18px]"><span className="w-40 pb-1 font-medium text-gray-800">Student ID</span><span>:  {formData.studentId}</span></div>
+                      <div className="flex ml-20 text-[18px]"><span className="w-40 pb-1 font-medium text-gray-800">Course ID</span><span>: {formData.courseId}</span></div>
+                      <div className="flex ml-20 text-[18px]"><span className="w-40 pb-1 font-medium text-gray-800">Mobile Number</span><span>: {formData.mobile}</span></div>
+                      <div className="flex ml-20 text-[18px]"><span className="w-40 pb-1 font-medium text-gray-800">Course</span><span>: {formData.course}</span></div>
+                      <div className="flex ml-20 text-[18px]"><span className="w-40 pb-1 font-medium text-gray-800">D.O.B.</span><span>: {formData.dob}</span></div>
                     </div>
                   </div>
                 </div>
 
                 <button
                   onClick={handleDownload}
-                  className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition duration-200 shadow-md"
+                  className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
                 >
-                  📥 Download ID Card
-                </button>
-
-                <button
-                  onClick={() => setShowPreview(false)}
-                  className="w-full bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700 transition duration-200 shadow-md"
-                >
-                  ✏️ Edit Details
+                  <Download size={20} />
+                  Download ID Card
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-96 text-gray-400 border-2 border-dashed border-gray-300 rounded-lg">
-                <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                </svg>
-                <p className="text-center text-lg font-medium">
-                  Fill the form and click<br />"Generate ID Card"<br />to preview your ID card
-                </p>
+              <div className="flex items-center justify-center h-96 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                <div className="text-center text-gray-500">
+                  <User size={64} className="mx-auto mb-4 text-gray-400" />
+                  <p className="font-medium">Fill the form and click "Generate Preview"</p>
+                  <p className="text-sm mt-2">to see your ID card</p>
+                </div>
               </div>
             )}
           </div>
@@ -363,6 +430,4 @@ const StudentIDCardGenerator = () => {
       </div>
     </div>
   );
-};
-
-export default StudentIDCardGenerator;
+}
