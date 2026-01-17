@@ -32,7 +32,9 @@ export default function IDCardGenerator() {
     'Java Full Stack Developer',
     'Software Testing',
     'Python Full Stack',
-    'Data Science'
+    'Data Science',
+    'Data Analyst ',
+    'DevOps with AWS'
   ];
 
   const handleInputChange = (e) => {
